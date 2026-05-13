@@ -1,4 +1,4 @@
-// esse programa envia mensagens no barramento can, utilizo o mesmo para averiguar se fiz todas as ligacoes de fios corretamente no microcontrolador
+// esse programa envia mensagens no barramento can, utilizo o mesmo para averiguar se fiz todas as ligacoes de fios corretamente no microcontrolador;
 #include <Arduino.h> 
 #include <ESP32-TWAI-CAN.hpp>
 
