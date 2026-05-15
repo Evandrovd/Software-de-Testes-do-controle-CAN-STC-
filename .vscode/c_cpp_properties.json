@@ -8,9 +8,9 @@
         {
             "name": "PlatformIO",
             "includePath": [
-                "/home/evandrovd/Documents/PlatformIO/Projects/Esp32MotorControlTest/include",
-                "/home/evandrovd/Documents/PlatformIO/Projects/Esp32MotorControlTest/src",
-                "/home/evandrovd/Documents/PlatformIO/Projects/Esp32MotorControlTest/.pio/libdeps/upesy_wroom/ESP32-TWAI-CAN/src",
+                "/home/evandrovd/Documents/Arariboia/Prog/Software-de-Testes-do-controle-CAN-STC-/include",
+                "/home/evandrovd/Documents/Arariboia/Prog/Software-de-Testes-do-controle-CAN-STC-/src",
+                "/home/evandrovd/Documents/Arariboia/Prog/Software-de-Testes-do-controle-CAN-STC-/.pio/libdeps/upesy_wroom/ESP32-TWAI-CAN/src",
                 "/home/evandrovd/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/newlib/platform_include",
                 "/home/evandrovd/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include",
                 "/home/evandrovd/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include/esp_additions/freertos",
@@ -207,6 +207,7 @@
                 "/home/evandrovd/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/qio_qspi/include",
                 "/home/evandrovd/.platformio/packages/framework-arduinoespressif32/cores/esp32",
                 "/home/evandrovd/.platformio/packages/framework-arduinoespressif32/variants/uPesy_esp32_wroom_devkit",
+                "/home/evandrovd/Documents/Arariboia/Prog/Software-de-Testes-do-controle-CAN-STC-/lib/can_queue",
                 "/home/evandrovd/.platformio/packages/framework-arduinoespressif32/libraries/ArduinoOTA/src",
                 "/home/evandrovd/.platformio/packages/framework-arduinoespressif32/libraries/AsyncUDP/src",
                 "/home/evandrovd/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src",
@@ -245,9 +246,9 @@
             "browse": {
                 "limitSymbolsToIncludedHeaders": true,
                 "path": [
-                    "/home/evandrovd/Documents/PlatformIO/Projects/Esp32MotorControlTest/include",
-                    "/home/evandrovd/Documents/PlatformIO/Projects/Esp32MotorControlTest/src",
-                    "/home/evandrovd/Documents/PlatformIO/Projects/Esp32MotorControlTest/.pio/libdeps/upesy_wroom/ESP32-TWAI-CAN/src",
+                    "/home/evandrovd/Documents/Arariboia/Prog/Software-de-Testes-do-controle-CAN-STC-/include",
+                    "/home/evandrovd/Documents/Arariboia/Prog/Software-de-Testes-do-controle-CAN-STC-/src",
+                    "/home/evandrovd/Documents/Arariboia/Prog/Software-de-Testes-do-controle-CAN-STC-/.pio/libdeps/upesy_wroom/ESP32-TWAI-CAN/src",
                     "/home/evandrovd/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/newlib/platform_include",
                     "/home/evandrovd/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include",
                     "/home/evandrovd/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include/esp_additions/freertos",
@@ -444,6 +445,7 @@
                     "/home/evandrovd/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/qio_qspi/include",
                     "/home/evandrovd/.platformio/packages/framework-arduinoespressif32/cores/esp32",
                     "/home/evandrovd/.platformio/packages/framework-arduinoespressif32/variants/uPesy_esp32_wroom_devkit",
+                    "/home/evandrovd/Documents/Arariboia/Prog/Software-de-Testes-do-controle-CAN-STC-/lib/can_queue",
                     "/home/evandrovd/.platformio/packages/framework-arduinoespressif32/libraries/ArduinoOTA/src",
                     "/home/evandrovd/.platformio/packages/framework-arduinoespressif32/libraries/AsyncUDP/src",
                     "/home/evandrovd/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src",

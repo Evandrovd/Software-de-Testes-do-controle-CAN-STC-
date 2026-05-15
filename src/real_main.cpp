@@ -1,5 +1,6 @@
 #include <Arduino.h> 
 #include <ESP32-TWAI-CAN.hpp>
+#include <can_queue.hpp>
 
 #define vel_min -5000 // Velovcidade minima que estaremos aceitando para o motor neste momento;
 #define vel_max 5000 // Velocidade maxima que estaremos aceitando para o motor neste momento;
@@ -50,6 +51,42 @@ uint16_t current_phase = 32000;
 // caso a contagem nao esteja correta ou nao chegue ao motor por 10x seguidas, que se traduzem para 500ms, o motor desliga e emite os 21 beeps de erro no can.
 byte life_signal;
 
+void send_can_handshake() {
+  life_signal = 0; // Zera o sinal de vida pra que a proxima mensagem seja o numero 1; 1801D0F0
+  txFrame.identifier  = 0x0C01EFD0;// ID do vcu, vulgo este controlador.
+  txFrame.extd = TWAI_MSG_FLAG_EXTD; // Informa o controlador can da esp32 que esse e um frame do tipo longo, de 29 bits e nao o normal de 11 bits;
+  txFrame.data_length_code = 8;     // tamanho do pacote de dados, 8 byes;
+  txFrame.data[0] = 0xAA; // byte 0 == targetPhaseCurrent == torque;
+  txFrame.data[1] = 0xAA; // byte 1 == targetPhaseCurrent == torque;
+  txFrame.data[2] = 0xAA;// byte 2 == TargetSpeed == Velocidade; ULTIMOS 4 bits. o proximo serao os primeiro 4 bits.
+  txFrame.data[3] = 0xAA; // byte 3 == TargetSpeed == Velocidade; Lembrando que e no formato little-endian, que quer dizer que o algarismo mais signficativo vem primeiro
+  txFrame.data[4] = 0xAA; // byte 4;  O primeiro bit controla se o motor esta ligado ou nao, o segundo se o controle por torque ou velocidade, o resto n serve p nada;\_que se  traduz para o numero e escrito de traz para frente;
+  txFrame.data[5] = 0xAA; // byte 5; // nao serve para nada aqui;
+  txFrame.data[6] = 0xAA; // byte 6; // nao serve para nada aqui;
+  txFrame.data[7] = 0xAA; // byte 7; Sinal de vida, vulgo o numero que tem que ser somado +1 toda vez;
+  send_can_message(); // envia a mensagem
+  last_sent_time = millis(); // Seta o horario do envio da ultima mensagem;
+}
+
+CanFrame send_can_default() {
+  CanFrame txFrame;
+  txFrame.identifier  = 0x0C01EFD0;// ID do vcu, vulgo este controlador.
+  txFrame.extd = TWAI_MSG_FLAG_EXTD; // Informa o controlador can da esp32 que esse e um frame do tipo longo, de 29 bits e nao o normal de 11 bits;
+  txFrame.data_length_code = 8; // tamanho do pacote de dados, 8 byes;
+  txFrame.data[0] = (uint8_t)current_phase; // byte 0 == targetPhaseCurrent == torque;
+  txFrame.data[1] = (uint8_t)(current_phase >> 8); // byte 1 == targetPhaseCurrent == torque;
+  txFrame.data[2] = (uint8_t)speed;// byte 2 == TargetSpeed == Velocidade; ULTIMOS 4 bits. o proximo serao os primeiro 4 bits.
+  txFrame.data[3] = ((uint8_t)(speed >> 8)); // byte 3 == TargetSpeed == Velocidade; Lembrando que e no formato little-endian, que quer dizer que o algarismo mais signficativo vem primeiro
+  txFrame.data[4] = 0b00000011; // byte 4;  O primeiro bit controla se o motor esta ligado ou nao, o segundo se o controle por torque ou velocidade, o resto n serve p nada;\_que se  traduz para o numero e escrito de traz para frente;
+  txFrame.data[5] = 0x00; // byte 5; // nao serve para nada aqui;
+  txFrame.data[6] = 0x00; // byte 6; // nao serve para nada aqui;
+  txFrame.data[7] = life_signal++; // byte 7; Sinal de vida, vulgo o numero que tem que ser somado +1 toda vez;
+  return txFrame;
+}
+ 
+
+
+
 // funcao que lida com o envio de mensagens no barramento can;
 bool send_can_message () { 
   // Se der tudo certo no envio;
@@ -93,42 +130,18 @@ void handle_incoming_messages() {
         // Se for uma mensagem de anuncio do motor.1801D0F0
         if (rxFrame.data[0] == 0x55 && rxFrame.data[3] == 0x55 && rxFrame.data[7] == 0x55) 
           { // se o frame 0,3 e 7 contem 0x55 assumimos que tudo e 0x55 e logo e uma mensagem de anuncio do motor;
-            life_signal = 0; // Zera o sinal de vida pra que a proxima mensagem seja o numero 1; 1801D0F0
-            txFrame.identifier  = 0x0C01EFD0;// ID do vcu, vulgo este controlador.
-            txFrame.extd = TWAI_MSG_FLAG_EXTD; // Informa o controlador can da esp32 que esse e um frame do tipo longo, de 29 bits e nao o normal de 11 bits;
-            txFrame.data_length_code = 8;     // tamanho do pacote de dados, 8 byes;
-            txFrame.data[0] = 0xAA; // byte 0 == targetPhaseCurrent == torque;
-            txFrame.data[1] = 0xAA; // byte 1 == targetPhaseCurrent == torque;
-            txFrame.data[2] = 0xAA;// byte 2 == TargetSpeed == Velocidade; ULTIMOS 4 bits. o proximo serao os primeiro 4 bits.
-            txFrame.data[3] = 0xAA; // byte 3 == TargetSpeed == Velocidade; Lembrando que e no formato little-endian, que quer dizer que o algarismo mais signficativo vem primeiro
-            txFrame.data[4] = 0xAA; // byte 4;  O primeiro bit controla se o motor esta ligado ou nao, o segundo se o controle por torque ou velocidade, o resto n serve p nada;\_que se  traduz para o numero e escrito de traz para frente;
-            txFrame.data[5] = 0xAA; // byte 5; // nao serve para nada aqui;
-            txFrame.data[6] = 0xAA; // byte 6; // nao serve para nada aqui;
-            txFrame.data[7] = 0xAA; // byte 7; Sinal de vida, vulgo o numero que tem que ser somado +1 toda vez;
-            send_can_message(); // envia a mensagem
-            last_sent_time = millis(); // Seta o horario do envio da ultima mensagem;
+            send_can_handshake();
           }
       // lida com manter o motor apos a primeira que nao seja de anuncio e recebida;
       // Se nao for uma mensagem de anuncio de motor.
         else if ((millis() - last_sent_time) >= 50) // Se for qualquer outra mensagem que nao tudo 0x55, quer dizer que o motor esta enviado mensagens de funcionamento;
         { 
-          txFrame.identifier  = 0x0C01EFD0;// ID do vcu, vulgo este controlador.
-          txFrame.extd = TWAI_MSG_FLAG_EXTD; // Informa o controlador can da esp32 que esse e um frame do tipo longo, de 29 bits e nao o normal de 11 bits;
-          txFrame.data_length_code = 8; // tamanho do pacote de dados, 8 byes;
-          txFrame.data[0] = (uint8_t)current_phase; // byte 0 == targetPhaseCurrent == torque;
-          txFrame.data[1] = (uint8_t)(current_phase >> 8); // byte 1 == targetPhaseCurrent == torque;
-          txFrame.data[2] = (uint8_t)speed;// byte 2 == TargetSpeed == Velocidade; ULTIMOS 4 bits. o proximo serao os primeiro 4 bits.
-          txFrame.data[3] = ((uint8_t)(speed >> 8)); // byte 3 == TargetSpeed == Velocidade; Lembrando que e no formato little-endian, que quer dizer que o algarismo mais signficativo vem primeiro
-          txFrame.data[4] = 0b00000011; // byte 4;  O primeiro bit controla se o motor esta ligado ou nao, o segundo se o controle por torque ou velocidade, o resto n serve p nada;\_que se  traduz para o numero e escrito de traz para frente;
-          txFrame.data[5] = 0x00; // byte 5; // nao serve para nada aqui;
-          txFrame.data[6] = 0x00; // byte 6; // nao serve para nada aqui;
-          txFrame.data[7] = life_signal++; // byte 7; Sinal de vida, vulgo o numero que tem que ser somado +1 toda vez;
-          send_can_message(); // envia a mensagem
-          last_sent_time = millis(); // Seta o horario do envio da ultima mensagem;
+          CanFrame * mesage_to_send;
+          can_queue(&txFrame, send_can_default);
         }
   }
   else {
-    //send_can_message();
+    Serial.println("Mensagem nao reconhecida recebida via CAN.");
   }
     
 
@@ -280,7 +293,6 @@ void setup() {
 // todo, reescrever codigo para aguardar ate que a velocidade do motor chege a zero, pela leitura de sensores, e entao comecar a acelar, ao inves de usar 1s como fazemos atualmente.
 
 void loop() {
-handle_set_speed_delays();
 handle_serial_input();
 handle_incoming_messages();
 }
