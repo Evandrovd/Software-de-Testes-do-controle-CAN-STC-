@@ -2,7 +2,7 @@
 #include <ESP32-TWAI-CAN.hpp>
 
 
-#define can_queue_max_size 10
+#define can_queue_max_size 40
 
 // Definindo a estrutura que guardara
 typedef struct __can_queue_item
@@ -55,7 +55,7 @@ int can_dequeue (CanFrame *message) {
         // para todos membros da fila;
         for (unsigned short int i = 0; i < can_queue_size; i++) {
             // checa se existe uma mensagem na fila em tempo de ser enviada
-            if (queue_vector[i].time_to_be_sent >= millis()) {
+            if (queue_vector[i].time_to_be_sent <= millis()) {
                 // seestiver, retorna a mensagem
                 on_time = i;
             } 
