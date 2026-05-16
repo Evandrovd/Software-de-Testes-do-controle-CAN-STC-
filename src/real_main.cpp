@@ -153,13 +153,16 @@ void handle_incoming_messages() {
     if (rxFrame.data[0] == 0x55 && rxFrame.data[3] == 0x55 && rxFrame.data[7] == 0x55) 
       { // se o frame 0,3 e 7 contem 0x55 assumimos que tudo e 0x55 e logo e uma mensagem de anuncio do motor;
         send_can_handshake();
+        return;
       }
     // lida com manter o motor apos a primeira que nao seja de anuncio e recebida;
     // Se nao for uma mensagem de anuncio de motor.
-    else if ((millis() - last_sent_time) >= 50) // Se for qualquer outra mensagem que nao tudo 0x55, quer dizer que o motor esta enviado mensagens de funcionamento;
+    if ((millis() - last_sent_time) >= 50) // Se for qualquer outra mensagem que nao tudo 0x55, quer dizer que o motor esta enviado mensagens de funcionamento;
     { 
-      c_queue(&txFrame, can_default_message); // Checa se tem algo na fila se tiver escreve na mensagem de envio, se nao escreve a mensagem padrao;
-      if (send_can_message() == false) Serial.println("erro no envido da mensagem can");
+      if (c_queue(&txFrame) == -1) {
+        can_default_message();
+      }
+      send_can_message();
       last_sent_time = millis(); // Seta o horario do envio da ultima mensagem;
     }
   } 

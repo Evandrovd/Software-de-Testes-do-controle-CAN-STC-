@@ -1,12 +1,12 @@
 #include <Arduino.h> 
 #include <ESP32-TWAI-CAN.hpp>
 
-
-#define can_queue_max_size 80
-
-#define insertion_multiplicator 4;
+#define number_of_resends 4
+#define can_queue_max_size 40
 
 CanFrame can_frame;
+
+unsigned short int resends_counter = 0;
 
 // short int para guardar o tamanho usado da fila, para facilitar operacoes;
 unsigned short int can_queue_size = 0;
@@ -29,12 +29,6 @@ bool can_enqueue(CanFrame item) {
             // adicona frame na fila
             queue_vector[can_queue_size] = item;
             // adiciona 1 para o numero de itens na fila
-            can_queue_size += 1;
-            // adicona frame na fila
-            queue_vector[can_queue_size] = item;
-            can_queue_size += 1;
-            // adicona frame na fila
-            queue_vector[can_queue_size] = item;
             can_queue_size += 1;
         }
     // Retorna -1 para dizer que houve um problema;
@@ -68,19 +62,16 @@ int can_dequeue (CanFrame *message) {
 
 // Funcao que retorna o frame can a ser enviado no barramento can.
 // Recebe um ponteiro para guardar o frame can e o tempo de delay antes de enviar o mesmo.
-short int c_queue(CanFrame *returning_from_queue, CanFrame (*default_message)()) {
-    if (returning_from_queue == NULL || (default_message) == NULL) return -1;
-    // cria um espaco para guarda a possivel mensagem can recebida.
-    CanFrame can_message;
+short int c_queue(CanFrame *returning_from_queue) {
     // se a funcao tirar da fila tiver alguem para tirar da fila;
-    if (can_dequeue(&can_message) == 1) {
+    if (can_queue_size > 0) {
+        // cria um espaco para guarda a possivel mensagem can recebida.
+        CanFrame can_message;
         print_can_message(can_message);
-        // Escreve no ponteiro recebido a mensageem da fila.
+        can_dequeue(&can_message);
         *returning_from_queue = can_message;
-        return -1;
-    } else {
-        // Se nao tiver, escreve a mensagem padrao;
-        *returning_from_queue = (*default_message)();
         return 1;
     }
+    return -1;
 }
+
