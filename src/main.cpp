@@ -7,16 +7,15 @@
 #define CAN_TX 5 // Pino padrao de envio can na esp32;
 #define CAN_RX 4 // Pino padrao de recepcao can na esp32;
 
-#define max_current_phase 300
+#define max_current_phase 300 // diferenca de velocidade na qual o algoritimo de rampa comeca a funcionar, a partir daqui um degrau sera criado para cada diferenca de tamanho.
 
-// diferenca de velocidade na qual o algoritimo de rampa comeca a funcionar, a partir daqui um degrau sera criado para cada diferenca de tamanho.
-#define ramping_threshhold 500
+#define ramping_threshhold 500 // Variavel que define o valor de cada degrau da rampa.
 
 #define tamanho_max_comando 5 // Definicao de tamanho maximo de comando para o parsing, 6 porque o maior possivel e -3000 que tem 5 casas;
 
 #define controller_id 1801D0F0 // id do controlador do motor a ser enviado no barramento can. Muda conforme o endereco do motor que recebe
 
-#define ramping_smoothing_counter_target 2 // se usar um valor menor que 2 a tensao fica muito alta no barramento quando existe reversao.
+#define ramping_smoothing_counter_target 2 // se usar um valor menor que 2 a tensao fica muito alta no barramento quando existe reversao
 
 // variavel que guarda a velocidade alvo. Valor inicial 32000 que quer dizer 0rpm.
 uint16_t target_speed = 32000;
@@ -38,10 +37,6 @@ unsigned short int buffer_count;
 
 // Espaco para guardar o frame a ser enviado;
 CanFrame frame_buffer; 
-
-// guarda o horario da ultima mensagem enviada para comparamos com o horario atual
-// assim garantimos que nao vamos sobrecarregar o CAN bus com milhares de mensagens.
-unsigned long last_sent_time; 
 
 // !!!NAO EDITE ESSA VARIAVEL SEM USAR A FUNCAO set_if_valid_speed(), RISCO DE QUEIMA DO ESC!!!
 // Velocidade que e enviada para o motor a cada frame; 
@@ -105,8 +100,6 @@ void send_can_handshake() {
   frame_buffer.data[5] = 0xAA; // byte 5; // nao serve para nada aqui;
   frame_buffer.data[6] = 0xAA; // byte 6; // nao serve para nada aqui;
   frame_buffer.data[7] = 0xAA; // byte 7; Sinal de vida, vulgo o numero que tem que ser somado +1 toda vez;
-  send_can_message(); // envia a mensagem
-  last_sent_time = millis(); // Seta o horario do envio da ultima mensagem;
 }
 
 // funcao que retorna a mensagem padrao can;
@@ -177,18 +170,18 @@ void handle_incoming_messages() {
       if (frame_buffer.data[0] == 0x55 && frame_buffer.data[3] == 0x55 && frame_buffer.data[7] == 0x55) { 
       // se o frame 0,3 e 7 contem 0x55 assumimos que tudo e 0x55 e logo e uma mensagem de anuncio do motor;
         send_can_handshake();
-        return;
       }
       else {
         // lida com manter o motor apos a primeira que nao seja de anuncio e recebida;
         // Se nao for uma mensagem de anuncio de motor, responde com uma mensagem de funcionamento;
         can_normal_message();
-        send_can_message();
         // handle_acceleration e colocado aqui por que queremos que ele execute somente em intervalos de 50 em 50 ms, e nao antes.
         // Se colocarmos no main loop ele vai executar muito rapido e a velocidade mudaria nao a cada tick de 50ms, mas a cada
         // loop do esp32 que e muito mais rapido;
         handle_accelaration();
       }
+      // envia a mensagem can.
+      send_can_message();
     }
   }
 }
@@ -282,9 +275,6 @@ void setup() {
   // printar linha de inicializacao completa.
   Serial.println("Esp32 can inicializado com sucesso! Pronto para trasmitir.");
 }
-
-// todo implementar fila can, que envia as mensagens se der o tempo de delay de envio delas, ou envia a mensagem padrao keepalive se nao houver mensagens
-// todo, reescrever codigo para aguardar ate que a velocidade do motor chege a zero, pela leitura de sensores, e entao comecar a acelar, ao inves de usar 1s como fazemos atualmente.
 
 void loop() {
 handle_serial_input();
