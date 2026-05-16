@@ -10,7 +10,6 @@
             "includePath": [
                 "/home/evandrovd/Documents/PlatformIO/Projects/Esp32MotorControlTest/include",
                 "/home/evandrovd/Documents/PlatformIO/Projects/Esp32MotorControlTest/src",
-                "/home/evandrovd/Documents/PlatformIO/Projects/Esp32MotorControlTest/lib/can_queue",
                 "/home/evandrovd/Documents/PlatformIO/Projects/Esp32MotorControlTest/.pio/libdeps/upesy_wroom/ESP32-TWAI-CAN/src",
                 "/home/evandrovd/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/newlib/platform_include",
                 "/home/evandrovd/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include",
@@ -248,7 +247,6 @@
                 "path": [
                     "/home/evandrovd/Documents/PlatformIO/Projects/Esp32MotorControlTest/include",
                     "/home/evandrovd/Documents/PlatformIO/Projects/Esp32MotorControlTest/src",
-                    "/home/evandrovd/Documents/PlatformIO/Projects/Esp32MotorControlTest/lib/can_queue",
                     "/home/evandrovd/Documents/PlatformIO/Projects/Esp32MotorControlTest/.pio/libdeps/upesy_wroom/ESP32-TWAI-CAN/src",
                     "/home/evandrovd/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/newlib/platform_include",
                     "/home/evandrovd/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include",

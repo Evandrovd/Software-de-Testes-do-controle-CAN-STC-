@@ -1,6 +1,5 @@
 #include <Arduino.h> 
 #include <ESP32-TWAI-CAN.hpp>
-#include <can_queue.hpp>
 
 #define vel_min -6000// Velovcidade minima que estaremos aceitando para o motor neste momento;
 #define vel_max 6000 // Velocidade maxima que estaremos aceitando para o motor neste momento;
@@ -31,7 +30,8 @@ bool first_loop = true;
 // variavel para salvar o valor do ramping threshold com o devido sinal;
 short int signed_ramping_threshhold;
 
-char buffer[tamanho_max_comando + 1] = {'\0'};// Buffer para guardar o comando sendo digitado na porta serial; O mais um e devido ao fato de todo buffer ter que terminar em NULL para ser convertido devidamente a string.
+// Buffer para guardar o comando sendo digitado na porta serial; O mais um e devido ao fato de todo buffer ter que terminar em NULL para ser convertido devidamente a string.
+char buffer[tamanho_max_comando + 1] = {'\0'};
 
 // variavel de contagem do buffer para entrada de comandos; Utilizada somente na funcao handle_incoming_messages().5
 unsigned short int buffer_count;
@@ -47,12 +47,9 @@ unsigned long last_sent_time;
 // Velocidade que e enviada para o motor a cada frame; 
 uint16_t speed = 32000; 
 
-// Velocidade a ser guardada pois deve ser enviada com o delay de inversao;
-uint16_t delayed_speed;
-
 // O valor da corrente das fases do motor; Esse valor tem que ser alterado caso se queira alterar o sentido do motor.
-// Se o valor nao for alterado o motor se recusa a inverter o sentido.
-// A corrente de fase e o a velocidade(speed) devem ter o mesmo sentido, isto e, devem possuir o mesmo sinal.
+// Se o valor nao for alterado o motor se recusa a inverter o sentido. Te ignorando e ficando parado.
+// A corrente de fase e o a velocidade(speed) devem ter o mesmo sentido, isto e, devem possuir o mesmo sinal. Se nao o motor nao se move.
 uint16_t current_phase = 32000;
 
 // guarda a contagem do sinal de vida que tem que ser enviado para o motor.
