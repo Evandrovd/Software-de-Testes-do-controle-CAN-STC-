@@ -2,13 +2,17 @@
 #include <ESP32-TWAI-CAN.hpp>
 #include <can_queue.hpp>
 
-#define vel_min -5000 // Velovcidade minima que estaremos aceitando para o motor neste momento;
-#define vel_max 5000 // Velocidade maxima que estaremos aceitando para o motor neste momento;
+#define vel_min -5500 // Velovcidade minima que estaremos aceitando para o motor neste momento;
+#define vel_max 5500 // Velocidade maxima que estaremos aceitando para o motor neste momento;
 
 #define CAN_TX 5 // Pino padrao de envio can na esp32;
 #define CAN_RX 4 // Pino padrao de recepcao can na esp32;
 
-#define max_current_phase 300;
+#define max_current_phase 300
+
+
+// diferenca de velocidade na qual o algoritimo de rampa comeca a funcionar, a partir daqui um degrau sera criado para cada diferenca de tamanho.
+#define ramping_threshhold 500
 
 #define delay_inversao 700 // tempo para esperar quando existe e pedida uma inversao do motor, em ms, 1000ms = 1s
 
@@ -20,11 +24,6 @@ char buffer[tamanho_max_comando + 1] = {'\0'};// Buffer para guardar o comando s
 
 // variavel de contagem do buffer para entrada de comandos; Utilizada somente na funcao handle_incoming_messages().5
 unsigned short int buffer_count;
-
-// Variavel para gravar o tempo que houve a ultima inversao, para garantir que o motor nao sera invertido sem antes aguardar o tempo necessario para ele parar
-// o que pode resultar na queima do mesmo ou do esc.
-unsigned long last_inversion_time;
-
 
 // Espaco para guardar o frame a ser enviado;
 CanFrame txFrame; 
@@ -40,8 +39,6 @@ uint16_t speed = 32000;
 // Velocidade a ser guardada pois deve ser enviada com o delay de inversao;
 uint16_t delayed_speed;
 
-bool toggle_delay;
-
 // O valor da corrente das fases do motor; Esse valor tem que ser alterado caso se queira alterar o sentido do motor.
 // Se o valor nao for alterado o motor se recusa a inverter o sentido.
 // A corrente de fase e o a velocidade(speed) devem ter o mesmo sentido, isto e, devem possuir o mesmo sinal.
@@ -50,42 +47,6 @@ uint16_t current_phase = 32000;
 // guarda a contagem do sinal de vida que tem que ser enviado para o motor.
 // caso a contagem nao esteja correta ou nao chegue ao motor por 10x seguidas, que se traduzem para 500ms, o motor desliga e emite os 21 beeps de erro no can.
 byte life_signal;
-
-void send_can_handshake() {
-  life_signal = 0; // Zera o sinal de vida pra que a proxima mensagem seja o numero 1; 1801D0F0
-  txFrame.identifier  = 0x0C01EFD0;// ID do vcu, vulgo este controlador.
-  txFrame.extd = TWAI_MSG_FLAG_EXTD; // Informa o controlador can da esp32 que esse e um frame do tipo longo, de 29 bits e nao o normal de 11 bits;
-  txFrame.data_length_code = 8;     // tamanho do pacote de dados, 8 byes;
-  txFrame.data[0] = 0xAA; // byte 0 == targetPhaseCurrent == torque;
-  txFrame.data[1] = 0xAA; // byte 1 == targetPhaseCurrent == torque;
-  txFrame.data[2] = 0xAA;// byte 2 == TargetSpeed == Velocidade; ULTIMOS 4 bits. o proximo serao os primeiro 4 bits.
-  txFrame.data[3] = 0xAA; // byte 3 == TargetSpeed == Velocidade; Lembrando que e no formato little-endian, que quer dizer que o algarismo mais signficativo vem primeiro
-  txFrame.data[4] = 0xAA; // byte 4;  O primeiro bit controla se o motor esta ligado ou nao, o segundo se o controle por torque ou velocidade, o resto n serve p nada;\_que se  traduz para o numero e escrito de traz para frente;
-  txFrame.data[5] = 0xAA; // byte 5; // nao serve para nada aqui;
-  txFrame.data[6] = 0xAA; // byte 6; // nao serve para nada aqui;
-  txFrame.data[7] = 0xAA; // byte 7; Sinal de vida, vulgo o numero que tem que ser somado +1 toda vez;
-  send_can_message(); // envia a mensagem
-  last_sent_time = millis(); // Seta o horario do envio da ultima mensagem;
-}
-
-CanFrame send_can_default() {
-  CanFrame txFrame;
-  txFrame.identifier  = 0x0C01EFD0;// ID do vcu, vulgo este controlador.
-  txFrame.extd = TWAI_MSG_FLAG_EXTD; // Informa o controlador can da esp32 que esse e um frame do tipo longo, de 29 bits e nao o normal de 11 bits;
-  txFrame.data_length_code = 8; // tamanho do pacote de dados, 8 byes;
-  txFrame.data[0] = (uint8_t)current_phase; // byte 0 == targetPhaseCurrent == torque;
-  txFrame.data[1] = (uint8_t)(current_phase >> 8); // byte 1 == targetPhaseCurrent == torque;
-  txFrame.data[2] = (uint8_t)speed;// byte 2 == TargetSpeed == Velocidade; ULTIMOS 4 bits. o proximo serao os primeiro 4 bits.
-  txFrame.data[3] = ((uint8_t)(speed >> 8)); // byte 3 == TargetSpeed == Velocidade; Lembrando que e no formato little-endian, que quer dizer que o algarismo mais signficativo vem primeiro
-  txFrame.data[4] = 0b00000011; // byte 4;  O primeiro bit controla se o motor esta ligado ou nao, o segundo se o controle por torque ou velocidade, o resto n serve p nada;\_que se  traduz para o numero e escrito de traz para frente;
-  txFrame.data[5] = 0x00; // byte 5; // nao serve para nada aqui;
-  txFrame.data[6] = 0x00; // byte 6; // nao serve para nada aqui;
-  txFrame.data[7] = life_signal++; // byte 7; Sinal de vida, vulgo o numero que tem que ser somado +1 toda vez;
-  return txFrame;
-}
- 
-
-
 
 // funcao que lida com o envio de mensagens no barramento can;
 bool send_can_message () { 
@@ -107,17 +68,78 @@ bool send_can_message () {
 
 
 // funcao para alinhar a corrente de fase com a direcao de movimento desejada;
-void align_current_fase() {
+// Recebe a velocidade;
+void align_current_fase(int peed) {
     // Se o sentido novo do movimento for positivo;
   if (speed > 32000) {
-    Serial.println("Invertendo Corrente de Fase.");
+    //Serial.println("Invertendo Corrente de Fase.");
     // seta a corrente de fase para o positiva;
     current_phase = 32000 + max_current_phase;
     // seta a corrente de fase para o negativa;
   } else if (speed < 32000) {
-    Serial.println("Invertendo Corrente de Fase.");
+    //Serial.println("Invertendo Corrente de Fase.");
     current_phase = 32000 - max_current_phase;
   }
+}
+
+// funcao que envia a mensagem de handshake via can;
+void send_can_handshake() {
+  Serial.println("Respondendo o pedido de handshake do motor!");
+  life_signal = 0; // Zera o sinal de vida pra que a proxima mensagem seja o numero 1; 1801D0F0
+  txFrame.identifier  = 0x0C01EFD0;// ID do vcu, vulgo este controlador.
+  txFrame.extd = TWAI_MSG_FLAG_EXTD; // Informa o controlador can da esp32 que esse e um frame do tipo longo, de 29 bits e nao o normal de 11 bits;
+  txFrame.data_length_code = 8;     // tamanho do pacote de dados, 8 byes;
+  txFrame.data[0] = 0xAA; // byte 0 == targetPhaseCurrent == torque;
+  txFrame.data[1] = 0xAA; // byte 1 == targetPhaseCurrent == torque;
+  txFrame.data[2] = 0xAA;// byte 2 == TargetSpeed == Velocidade; ULTIMOS 4 bits. o proximo serao os primeiro 4 bits.
+  txFrame.data[3] = 0xAA; // byte 3 == TargetSpeed == Velocidade; Lembrando que e no formato little-endian, que quer dizer que o algarismo mais signficativo vem primeiro
+  txFrame.data[4] = 0xAA; // byte 4;  O primeiro bit controla se o motor esta ligado ou nao, o segundo se o controle por torque ou velocidade, o resto n serve p nada;\_que se  traduz para o numero e escrito de traz para frente;
+  txFrame.data[5] = 0xAA; // byte 5; // nao serve para nada aqui;
+  txFrame.data[6] = 0xAA; // byte 6; // nao serve para nada aqui;
+  txFrame.data[7] = 0xAA; // byte 7; Sinal de vida, vulgo o numero que tem que ser somado +1 toda vez;
+  send_can_message(); // envia a mensagem
+  last_sent_time = millis(); // Seta o horario do envio da ultima mensagem;
+}
+
+// funcao que retorna a mensagem padrao can;
+CanFrame can_default_message() {
+  CanFrame txFrame;
+  txFrame.identifier  = 0x0C01EFD0;// ID do vcu, vulgo este controlador.
+  txFrame.extd = TWAI_MSG_FLAG_EXTD; // Informa o controlador can da esp32 que esse e um frame do tipo longo, de 29 bits e nao o normal de 11 bits;
+  txFrame.data_length_code = 8; // tamanho do pacote de dados, 8 byes;
+  txFrame.data[0] = (uint8_t)current_phase; // byte 0 == targetPhaseCurrent == torque;
+  txFrame.data[1] = (uint8_t)(current_phase >> 8); // byte 1 == targetPhaseCurrent == torque;
+  txFrame.data[2] = (uint8_t)speed;// byte 2 == TargetSpeed == Velocidade; ULTIMOS 4 bits. o proximo serao os primeiro 4 bits.
+  txFrame.data[3] = ((uint8_t)(speed >> 8)); // byte 3 == TargetSpeed == Velocidade; Lembrando que e no formato little-endian, que quer dizer que o algarismo mais signficativo vem primeiro
+  txFrame.data[4] = 0b00000011; // byte 4;  O primeiro bit controla se o motor esta ligado ou nao, o segundo se o controle por torque ou velocidade, o resto n serve p nada;\_que se  traduz para o numero e escrito de traz para frente;
+  txFrame.data[5] = 0x00; // byte 5; // nao serve para nada aqui;
+  txFrame.data[6] = 0x00; // byte 6; // nao serve para nada aqui;
+  txFrame.data[7] = life_signal++; // byte 7; Sinal de vida, vulgo o numero que tem que ser somado +1 toda vez;
+  align_current_fase(speed);
+  return txFrame;
+}
+
+// fucao que monta um frame can com uma velocidade diferente.
+CanFrame can_speed_change_message(int speed) {
+  CanFrame txFrame;
+  txFrame.identifier  = 0x0C01EFD0;// ID do vcu, vulgo este controlador.
+  txFrame.extd = TWAI_MSG_FLAG_EXTD; // Informa o controlador can da esp32 que esse e um frame do tipo longo, de 29 bits e nao o normal de 11 bits;
+  txFrame.data_length_code = 8; // tamanho do pacote de dados, 8 byes;
+  txFrame.data[0] = (uint8_t)current_phase; // byte 0 == targetPhaseCurrent == torque;
+  txFrame.data[1] = (uint8_t)(current_phase >> 8); // byte 1 == targetPhaseCurrent == torque;
+  txFrame.data[2] = (uint8_t)speed;// byte 2 == TargetSpeed == Velocidade; ULTIMOS 4 bits. o proximo serao os primeiro 4 bits.
+  txFrame.data[3] = ((uint8_t)(speed >> 8)); // byte 3 == TargetSpeed == Velocidade; Lembrando que e no formato little-endian, que quer dizer que o algarismo mais signficativo vem primeiro
+  txFrame.data[4] = 0b00000011; // byte 4;  O primeiro bit controla se o motor esta ligado ou nao, o segundo se o controle por torque ou velocidade, o resto n serve p nada;\_que se  traduz para o numero e escrito de traz para frente;
+  txFrame.data[5] = 0x00; // byte 5; // nao serve para nada aqui;
+  txFrame.data[6] = 0x00; // byte 6; // nao serve para nada aqui;
+  txFrame.data[7] = life_signal++; // byte 7; Sinal de vida, vulgo o numero que tem que ser somado +1 toda vez;
+  align_current_fase(speed);
+  return txFrame;
+}
+ 
+// Calcula a divisao de teto de a por b, ou a/b. Exemplo 3/2 = 2 porque 1.5 arredondado para cima e 2.
+int ceil_division(int a, int b) {
+  return (1+((a-1)/b));
 }
 
 // lida com as mensagens do motor;
@@ -126,25 +148,21 @@ void handle_incoming_messages() {
   CanFrame rxFrame;   
   // Se houver alguma mensagem no buffer CAN.
   if (ESP32Can.readFrame(rxFrame, 0)) { 
-        // lida com a mensagem da anuncio do motor.
-        // Se for uma mensagem de anuncio do motor.1801D0F0
-        if (rxFrame.data[0] == 0x55 && rxFrame.data[3] == 0x55 && rxFrame.data[7] == 0x55) 
-          { // se o frame 0,3 e 7 contem 0x55 assumimos que tudo e 0x55 e logo e uma mensagem de anuncio do motor;
-            send_can_handshake();
-          }
-      // lida com manter o motor apos a primeira que nao seja de anuncio e recebida;
-      // Se nao for uma mensagem de anuncio de motor.
-        else if ((millis() - last_sent_time) >= 50) // Se for qualquer outra mensagem que nao tudo 0x55, quer dizer que o motor esta enviado mensagens de funcionamento;
-        { 
-          CanFrame * mesage_to_send;
-          can_queue(&txFrame, send_can_default);
-        }
-  }
-  else {
-    Serial.println("Mensagem nao reconhecida recebida via CAN.");
-  }
-    
-
+    // lida com a mensagem da anuncio do motor.
+    // Se for uma mensagem de anuncio do motor.1801D0F0
+    if (rxFrame.data[0] == 0x55 && rxFrame.data[3] == 0x55 && rxFrame.data[7] == 0x55) 
+      { // se o frame 0,3 e 7 contem 0x55 assumimos que tudo e 0x55 e logo e uma mensagem de anuncio do motor;
+        send_can_handshake();
+      }
+    // lida com manter o motor apos a primeira que nao seja de anuncio e recebida;
+    // Se nao for uma mensagem de anuncio de motor.
+    else if ((millis() - last_sent_time) >= 50) // Se for qualquer outra mensagem que nao tudo 0x55, quer dizer que o motor esta enviado mensagens de funcionamento;
+    { 
+      c_queue(&txFrame, can_default_message); // Checa se tem algo na fila se tiver escreve na mensagem de envio, se nao escreve a mensagem padrao;
+      if (send_can_message() == false) Serial.println("erro no envido da mensagem can");
+      last_sent_time = millis(); // Seta o horario do envio da ultima mensagem;
+    }
+  } 
 }
 // *Atencao!!! setar a variavel speed sem usar essa funcao pode queimar o ESC pois nao existe protecao via CAN para inversao de corrente instantanea;*
 // Lida como envio das mensages ja interpretada pela funcao de lidar com entrada serial;
@@ -154,44 +172,47 @@ void set_if_valid_speed(int l_speed) {
     // tem que colocar o offset de +32000 como diz no datasheet;
     // 32000 e igual a velocidade 0.
     int new_speed;
-    new_speed = 32000;
-    new_speed += l_speed;
+    new_speed = 32000 + l_speed;
+
+    int speed_dif = new_speed - speed;
 
     Serial.print("Speed = ");
     Serial.print(speed);
     Serial.print(", new speed = ");
-    Serial.println(new_speed);
+    Serial.print(new_speed);
+    Serial.print(", Speed_dif = ");
+    Serial.println(speed_dif);
     
-    // se houver inversao de sentido;
-    if (((speed > 32000) && (new_speed < 32000)) || ((speed  < 32000) && (new_speed > 32000))) {
-      Serial.println("Adicionando delay de 1s para adicionar a proxima velocidade;");
-      // Liga o delay.
-      toggle_delay = 1;
-      // seta velocidade para 0, para aguadar o delay
-      speed = 32000;
-      // seta a velocidade do motor para a nova velocidade, so que com delay.
-      delayed_speed = new_speed;
-      // seta a tempo desde ultima inversao para agora;
-      last_inversion_time = millis();
-    } else {
-      Serial.println("Nao precisa de delay, inserindo diretamente a velocidade.");
-      // calcula o tempo passado desde o ultimo pedido de inversao;
-      unsigned long int t_ult_ped_inversao = (millis() - last_inversion_time);
-      // checa se nao existe tempo a ser aguardado devido a um pedido de inversao;
-      if ( t_ult_ped_inversao >= delay_inversao) {
-        // seta a proxima velocidade a ser enviada.
-        speed = new_speed;
-      } 
-      //caso exista tempo a ser aguardado, informa o tempo no terminal;
-      else {
-        Serial.print("Erro - voce nao pode alterar a velocidade durante um periodo de inversao, aguarde ");
-        Serial.print(t_ult_ped_inversao);
-        Serial.println("ms.");
-        return; // para a execucao da funcao aqui mesmo, para nao desperdicar recurcos;
+    // se sped_dif for maior que o max, implementa o algoritimo de rampa
+    if ((abs(speed_dif)) > ramping_threshhold) {
+      Serial.println("Implementando rampa.");
+
+      // calcula numero de passos ate chegar na velocidade alvo;
+      unsigned short int number_of_steps = ceil_division(abs(speed_dif),ramping_threshhold);
+      // escreve o numero de "degrais" necessarios;
+      // i<2 pq nao precisamos implementar o ultimo degrau ja que ele ja vai ser a speed final;
+      for(unsigned short int i = number_of_steps; i > 1; i--) {
+        if (speed_dif > 0) {
+          // atualiza o valor da velocidade;
+          speed += ramping_threshhold;
+          Serial.print("Velocidade de rampa = ");
+          Serial.println(speed);
+          // adicionando degrau de rampa na fila can;
+          can_enqueue(can_speed_change_message(speed));
+        } else {
+          speed -= ramping_threshhold;
+          // adicionando degrau de rampa na fila can;
+          can_enqueue(can_speed_change_message(speed));
+        }
       }
+
+      // apos inserir todos o degrais de rampa na fila, inserimos a velocidade final na velocidade a ser enviada nas mensagens padrao a partir de entao;
+      speed = new_speed;
+
+    } else {
+      Serial.println("Nao precisa de rampa, inserindo diretamente a velocidade.");
+      speed = new_speed;
     }
-    //seta o current phase de acordo com o maximo e o com o sentido do movimento pedido;
-    align_current_fase();
     //imprime na tela as informacoes;
     Serial.print("Nova velocidade escolhida com sucesso, ");
     Serial.print(l_speed);
@@ -249,19 +270,6 @@ void handle_serial_input() {
   }
 }
 
-// lida com possiveis delays necessarios na alteracao da velocidade, devido a inversao;
-// delay --> tempo em millisegundos para aguardar antes de trocar a velocidade;
-void handle_set_speed_delays() {
-  if (((millis() - last_inversion_time) >= delay_inversao) && toggle_delay) {
-    speed = delayed_speed;
-    //seta o current phase de acordo com o maximo e o com o sentido do movimento pedido;
-    align_current_fase();
-    Serial.print("Setando Velocidade depois do delay ");
-    Serial.println(speed);
-    toggle_delay = 0;
-  }
-}
-
 void setup() {
   // setar os pinos do can;
   ESP32Can.setPins(CAN_TX, CAN_RX);
@@ -281,8 +289,6 @@ void setup() {
   }
   // iniciar contagem do buffer comom 0;
   buffer_count = 0;
-  //Iniciar o ultimo tempo de inversao como 0 para nao dar problemas nas contas que temos que fazer com isso;
-  last_inversion_time = 0;
   // Comecar serial para debugging; baud rate 115200;
   Serial.begin(115200);
   // printar linha de inicializacao completa.
